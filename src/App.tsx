@@ -4,11 +4,67 @@ import { WorkplaceManager } from './components/WorkplaceManager';
 import { EmployeeManager } from './components/EmployeeManager';
 import { AvailabilityManager } from './components/AvailabilityManager';
 import { ScheduleDisplay } from './components/ScheduleDisplay';
-import { LayoutDashboard, Users, CalendarDays, Settings2, Sparkles, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, Settings2, Sparkles, Menu, X, CloudUpload, CloudDownload, Loader2, Check } from 'lucide-react';
 import { generateSchedule } from './utils/scheduler';
+import { pushToCloud, pullFromCloud } from './lib/sync';
+import { supabase } from './lib/supabase';
 import { format, addDays } from 'date-fns';
 
 const LOCAL_STORAGE_KEY = 'scheduler_app_data';
+
+const NO_SUPABASE_TIP = 'Настройте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY';
+
+// Кнопка с состояниями idle / loading / success(2с) / error(3с).
+// onRun возвращает текст ошибки или null при успехе.
+const SyncButton: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  disabled: boolean;
+  onRun: () => Promise<string | null>;
+}> = ({ icon, label, disabled, onRun }) => {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [err, setErr] = useState('');
+
+  const run = async () => {
+    setStatus('loading');
+    const error = await onRun();
+    if (error) {
+      setErr(error);
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 3000);
+    } else {
+      setStatus('success');
+      setTimeout(() => setStatus('idle'), 2000);
+    }
+  };
+
+  const tone = disabled
+    ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+    : status === 'success'
+    ? 'bg-green-50 border-green-300 text-green-700'
+    : status === 'error'
+    ? 'bg-red-50 border-red-300 text-red-600'
+    : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50';
+
+  return (
+    <button
+      onClick={run}
+      disabled={disabled || status === 'loading'}
+      title={disabled ? NO_SUPABASE_TIP : undefined}
+      className={`w-full py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 border transition-all ${tone}`}
+    >
+      {status === 'loading' ? (
+        <><Loader2 className="w-4 h-4 animate-spin" /> Синхронизация...</>
+      ) : status === 'success' ? (
+        <><Check className="w-4 h-4" /> Готово</>
+      ) : status === 'error' ? (
+        <><X className="w-4 h-4 shrink-0" /> <span className="truncate">{err}</span></>
+      ) : (
+        <>{icon} {label}</>
+      )}
+    </button>
+  );
+};
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'setup' | 'employees' | 'availability' | 'schedule'>('setup');
@@ -151,6 +207,31 @@ const App: React.FC = () => {
             <Sparkles className="w-4 h-4" />
             Создать график
           </button>
+
+          <div className="pt-2 space-y-2 border-t border-gray-100">
+            <SyncButton
+              icon={<CloudUpload className="w-4 h-4" />}
+              label="Сохранить в облако"
+              disabled={!supabase}
+              onRun={async () => {
+                const r = await pushToCloud(workplaces, employees);
+                return r.success ? null : (r.error || 'Ошибка');
+              }}
+            />
+            <SyncButton
+              icon={<CloudDownload className="w-4 h-4" />}
+              label="Загрузить из облака"
+              disabled={!supabase}
+              onRun={async () => {
+                const r = await pullFromCloud();
+                if (r.error) return r.error;
+                setWorkplaces(r.workplaces);
+                setEmployees(r.employees);
+                return null;
+              }}
+            />
+          </div>
+
           <button
             onClick={() => {
               if (confirm('Вы уверены, что хотите очистить все данные?')) {
