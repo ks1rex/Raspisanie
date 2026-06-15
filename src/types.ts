@@ -7,7 +7,7 @@ export interface Role {
 export interface Workplace {
   id: string;
   name: string;
-  roles: [Role, Role]; // Fixed 2 roles as per requirements
+  roles: Role[];
 }
 
 export interface Skill {
@@ -26,6 +26,7 @@ export interface Employee {
 export interface Availability {
   employeeId: string;
   date: string; // ISO string (YYYY-MM-DD)
+  timeNote?: string; // напр. "с 15:00", "до 18:00"
 }
 
 export interface Shift {
@@ -33,6 +34,7 @@ export interface Shift {
   roleId: string;
   employeeId: string;
   priority?: number;
+  timeNote?: string; // копируется из Availability при генерации
 }
 
 export interface DailySchedule {

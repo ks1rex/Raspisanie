@@ -1,5 +1,20 @@
-import { Workplace, Employee, Availability, DailySchedule, Shift, Role } from '../types';
+import { Workplace, Employee, Availability, DailySchedule, Shift } from '../types';
 import { differenceInDays, parseISO, format, addDays } from 'date-fns';
+
+// Меньше = лучше. Три категории, см. правила выбора кандидата.
+export function getCandidateScore(empPriority: number, skillPriority: number): number {
+  const emp12 = empPriority === 1 || empPriority === 2;
+  // Категория 1: emp 1/2, skill 1/2 — emp важнее skill
+  if (emp12 && (skillPriority === 1 || skillPriority === 2)) {
+    return (empPriority - 1) * 2 + (skillPriority - 1); // 0..3
+  }
+  // Категория 2: emp 1/2, skill 3 — по emp
+  if (emp12) {
+    return 10 + (empPriority - 1); // 10..11
+  }
+  // Категория 3: emp 3, любой skill — по skill
+  return 20 + (skillPriority - 1); // 20..22
+}
 
 export function generateSchedule(
   workplaces: Workplace[],
@@ -42,18 +57,6 @@ export function generateSchedule(
 
     // 2. Greedy approach with "First-Fail" heuristics
     while (openSlots.length > 0) {
-      // Calculate flexibility for each unassigned employee: how many currently open slots they can fill
-      const employeeFlexibility: Record<string, number> = {};
-      employees.forEach(emp => {
-        if (assignedToday.has(emp.id) || !availableTodayIds.includes(emp.id)) {
-          employeeFlexibility[emp.id] = 0;
-          return;
-        }
-        employeeFlexibility[emp.id] = openSlots.filter(slot => 
-          emp.skills.some(s => s.workplaceId === slot.workplaceId && s.roleId === slot.roleId)
-        ).length;
-      });
-
       // For each open slot, find potential candidates
       const slotCandidates = openSlots.map(slot => {
         const candidates = employees
@@ -64,11 +67,12 @@ export function generateSchedule(
           })
           .map(emp => {
             const skill = emp.skills.find(s => s.workplaceId === slot.workplaceId && s.roleId === slot.roleId)!;
-            return { 
-              emp, 
-              skillPriority: skill.priority, 
-              empPriority: emp.priority || 1,
-              flexibility: employeeFlexibility[emp.id]
+            const empPriority = emp.priority || 1;
+            return {
+              emp,
+              skillPriority: skill.priority,
+              empPriority,
+              score: getCandidateScore(empPriority, skill.priority)
             };
           });
         return { slot, candidates };
@@ -81,28 +85,24 @@ export function generateSchedule(
       fillableSlots.sort((a, b) => a.candidates.length - b.candidates.length);
       const target = fillableSlots[0];
       
-      // Pick the BEST CANDIDATE for this slot
-      // NEW LOGIC: We prioritize filling, so we should pick the candidate who has FEWER OPTIONS elsewhere (Least Flexible)
-      // to keep flexible employees available for other slots.
+      // Pick the BEST CANDIDATE for this slot: by score, then fewer shifts
       target.candidates.sort((a, b) => {
-        // 1. Flexibility (FEWER other options is better - ensures more coverage)
-        if (a.flexibility !== b.flexibility) return a.flexibility - b.flexibility;
-        // 2. Skill Priority (P1 > P2 > P3)
-        if (a.skillPriority !== b.skillPriority) return a.skillPriority - b.skillPriority;
-        // 3. Employee Priority (A1 > A2 > A3)
-        if (a.empPriority !== b.empPriority) return a.empPriority - b.empPriority;
-        // 4. Balance (fewer shifts first)
+        if (a.score !== b.score) return a.score - b.score;
         return employeeShiftsCount[a.emp.id] - employeeShiftsCount[b.emp.id];
       });
 
       const selected = target.candidates[0];
-      
+      const note = availabilities.find(
+        a => a.employeeId === selected.emp.id && a.date === currentDate
+      )?.timeNote;
+
       // Assign
       dayAssignments.push({
         workplaceId: target.slot.workplaceId,
         roleId: target.slot.roleId,
         employeeId: selected.emp.id,
-        priority: selected.skillPriority
+        priority: selected.skillPriority,
+        ...(note ? { timeNote: note } : {})
       });
 
       assignedToday.add(selected.emp.id);

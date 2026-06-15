@@ -11,33 +11,26 @@ interface Props {
 }
 
 export const ScheduleDisplay: React.FC<Props> = ({ schedule, workplaces, employees }) => {
-  const exportToText = () => {
-    let text = '';
-    
-    workplaces.forEach((wp, index) => {
-      text += `${wp.name}\n`;
-      
-      schedule.forEach((day) => {
+  const buildText = () =>
+    workplaces.map((wp) => {
+      const lines = schedule.map((day) => {
         const dayName = format(parseISO(day.date), 'EEEEEE', { locale: ru });
-        const capitalizedDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-        
-        const wpAssignments = day.assignments.filter(a => a.workplaceId === wp.id);
-        const names = wpAssignments
-          .map(a => employees.find(e => e.id === a.employeeId)?.name)
+        const cap = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+        const names = day.assignments
+          .filter(a => a.workplaceId === wp.id)
+          .map(a => {
+            const name = employees.find(e => e.id === a.employeeId)?.name;
+            return name ? (a.timeNote ? `${name} (${a.timeNote})` : name) : null;
+          })
           .filter(Boolean)
           .join(', ');
-          
-        if (names) {
-          text += `${capitalizedDay}: ${names}\n`;
-        }
-      });
-      
-      if (index < workplaces.length - 1) {
-        text += '\n';
-      }
-    });
+        return names ? `${cap}: ${names}\n` : '';
+      }).join('');
+      return `${wp.name}\n${lines}`;
+    }).join('\n');
 
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const exportToText = () => {
+    const blob = new Blob([buildText()], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -47,23 +40,7 @@ export const ScheduleDisplay: React.FC<Props> = ({ schedule, workplaces, employe
   };
 
   const copyToClipboard = () => {
-    let text = '';
-    workplaces.forEach((wp, index) => {
-      text += `${wp.name}\n`;
-      schedule.forEach((day) => {
-        const dayName = format(parseISO(day.date), 'EEEEEE', { locale: ru });
-        const capitalizedDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-        const wpAssignments = day.assignments.filter(a => a.workplaceId === wp.id);
-        const names = wpAssignments
-          .map(a => employees.find(e => e.id === a.employeeId)?.name)
-          .filter(Boolean)
-          .join(', ');
-        if (names) text += `${capitalizedDay}: ${names}\n`;
-      });
-      if (index < workplaces.length - 1) text += '\n';
-    });
-    
-    navigator.clipboard.writeText(text).then(() => {
+    navigator.clipboard.writeText(buildText()).then(() => {
       alert('Текст скопирован в буфер обмена');
     });
   };
@@ -135,12 +112,15 @@ export const ScheduleDisplay: React.FC<Props> = ({ schedule, workplaces, employe
                               {roleAssignments.map((assignment, idx) => {
                                 const employee = employees.find(e => e.id === assignment.employeeId);
                                 return (
-                                  <div key={idx} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100 transition-hover hover:border-indigo-200">
+                                  <div key={idx} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100 transition-colors hover:border-indigo-200">
                                     <div className="flex items-center gap-3">
                                       <div className="w-8 h-8 bg-white rounded-full border border-gray-200 flex items-center justify-center text-indigo-500">
                                         <User className="w-4 h-4" />
                                       </div>
-                                      <span className="font-semibold text-gray-700">{employee?.name || 'Не назначен'}</span>
+                                      <span className="font-semibold text-gray-700">
+                                        {employee?.name || 'Не назначен'}
+                                        {employee && assignment.timeNote && ` (${assignment.timeNote})`}
+                                      </span>
                                     </div>
                                     {assignment.priority && (
                                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${

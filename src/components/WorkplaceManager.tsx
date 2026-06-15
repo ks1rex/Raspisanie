@@ -14,29 +14,26 @@ export const WorkplaceManager: React.FC<Props> = ({ workplaces, setWorkplaces, o
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [name, setName] = useState('');
-  const [role1Name, setRole1Name] = useState('Роль 1');
-  const [role1Count, setRole1Count] = useState(1);
-  const [role2Name, setRole2Name] = useState('Роль 2');
-  const [role2Count, setRole2Count] = useState(1);
+  const [roles, setRoles] = useState<Role[]>([{ id: crypto.randomUUID(), name: 'Роль 1', count: 1 }]);
 
   const resetForm = () => {
     setName('');
-    setRole1Name('Роль 1');
-    setRole1Count(1);
-    setRole2Name('Роль 2');
-    setRole2Count(1);
+    setRoles([{ id: crypto.randomUUID(), name: 'Роль 1', count: 1 }]);
     setIsAdding(false);
     setEditingId(null);
   };
 
-  const handleSave = () => {
-    const roles: [Role, Role] = [
-      { id: 'r1', name: role1Name, count: role1Count },
-      { id: 'r2', name: role2Name, count: role2Count },
-    ];
+  const addRole = () =>
+    setRoles([...roles, { id: crypto.randomUUID(), name: '', count: 1 }]);
+  const updateRole = (id: string, patch: Partial<Role>) =>
+    setRoles(roles.map(r => (r.id === id ? { ...r, ...patch } : r)));
+  const removeRole = (id: string) => setRoles(roles.filter(r => r.id !== id));
 
+  const canSave = !!name && roles.every(r => r.name.trim() !== '');
+
+  const handleSave = () => {
     if (editingId) {
-      setWorkplaces(workplaces.map(wp => 
+      setWorkplaces(workplaces.map(wp =>
         wp.id === editingId ? { ...wp, name, roles } : wp
       ));
     } else {
@@ -48,10 +45,7 @@ export const WorkplaceManager: React.FC<Props> = ({ workplaces, setWorkplaces, o
   const handleEdit = (wp: Workplace) => {
     setEditingId(wp.id);
     setName(wp.name);
-    setRole1Name(wp.roles[0].name);
-    setRole1Count(wp.roles[0].count);
-    setRole2Name(wp.roles[1].name);
-    setRole2Count(wp.roles[1].count);
+    setRoles(wp.roles.map(r => ({ ...r }))); // сохраняем существующие id
     setIsAdding(true);
   };
 
@@ -96,65 +90,61 @@ export const WorkplaceManager: React.FC<Props> = ({ workplaces, setWorkplaces, o
 
       {isAdding && (
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Название места</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="Напр. Склад А"
-              />
-            </div>
-            
-            <div className="p-4 bg-gray-50 rounded-lg space-y-3">
-              <h4 className="font-semibold text-gray-700 border-b pb-2">Роль 1</h4>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase">Название</label>
-                <input
-                  type="text"
-                  value={role1Name}
-                  onChange={(e) => setRole1Name(e.target.value)}
-                  className="w-full mt-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase">Количество человек</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={role1Count}
-                  onChange={(e) => setRole1Count(parseInt(e.target.value) || 1)}
-                  className="w-full mt-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="p-4 bg-gray-50 rounded-lg space-y-3">
-              <h4 className="font-semibold text-gray-700 border-b pb-2">Роль 2</h4>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase">Название</label>
-                <input
-                  type="text"
-                  value={role2Name}
-                  onChange={(e) => setRole2Name(e.target.value)}
-                  className="w-full mt-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase">Количество человек</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={role2Count}
-                  onChange={(e) => setRole2Count(parseInt(e.target.value) || 1)}
-                  className="w-full mt-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
-                />
-              </div>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Название места</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="Напр. Склад А"
+            />
           </div>
-          
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {roles.map((role, i) => (
+              <div key={role.id} className="p-4 bg-gray-50 rounded-lg space-y-3">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <h4 className="font-semibold text-gray-700">Роль {i + 1}</h4>
+                  {roles.length > 1 && (
+                    <button
+                      onClick={() => removeRole(role.id)}
+                      className="p-1 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase">Название</label>
+                  <input
+                    type="text"
+                    value={role.name}
+                    onChange={(e) => updateRole(role.id, { name: e.target.value })}
+                    className="w-full mt-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase">Количество человек</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={role.count}
+                    onChange={(e) => updateRole(role.id, { count: parseInt(e.target.value) || 1 })}
+                    className="w-full mt-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={addRole}
+            className="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            <Plus className="w-4 h-4" /> Добавить роль
+          </button>
+
           <div className="flex justify-end gap-3 pt-4">
             <button
               onClick={resetForm}
@@ -164,7 +154,7 @@ export const WorkplaceManager: React.FC<Props> = ({ workplaces, setWorkplaces, o
             </button>
             <button
               onClick={handleSave}
-              disabled={!name}
+              disabled={!canSave}
               className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition-all"
             >
               {editingId ? 'Сохранить изменения' : 'Создать'}

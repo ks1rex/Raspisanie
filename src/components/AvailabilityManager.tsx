@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Employee, Availability } from '../types';
 import { format, addDays } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { Check, X } from 'lucide-react';
+import { Check, X, Clock } from 'lucide-react';
 
 interface Props {
   employees: Employee[];
@@ -12,6 +12,10 @@ interface Props {
 
 export const AvailabilityManager: React.FC<Props> = ({ employees, availabilities, setAvailabilities }) => {
   const next14Days = Array.from({ length: 14 }, (_, i) => addDays(new Date(), i));
+
+  // Ключ ячейки, у которой открыт input времени
+  const [editing, setEditing] = useState<string | null>(null);
+  const cellKey = (employeeId: string, dateStr: string) => `${employeeId}|${dateStr}`;
 
   const toggleAvailability = (employeeId: string, date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
@@ -24,9 +28,18 @@ export const AvailabilityManager: React.FC<Props> = ({ employees, availabilities
     }
   };
 
-  const isAvailable = (employeeId: string, date: Date) => {
+  const updateTimeNote = (employeeId: string, date: string, timeNote: string) => {
+    const note = timeNote.trim();
+    setAvailabilities(availabilities.map(a =>
+      a.employeeId === employeeId && a.date === date
+        ? { ...a, timeNote: note || undefined }
+        : a
+    ));
+  };
+
+  const getAvailability = (employeeId: string, date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
-    return availabilities.some(a => a.employeeId === employeeId && a.date === dateStr);
+    return availabilities.find(a => a.employeeId === employeeId && a.date === dateStr);
   };
 
   if (employees.length === 0) {
@@ -65,19 +78,63 @@ export const AvailabilityManager: React.FC<Props> = ({ employees, availabilities
                     {emp.name}
                   </td>
                   {next14Days.map((day) => {
-                    const active = isAvailable(emp.id, day);
+                    const avail = getAvailability(emp.id, day);
+                    const dateStr = format(day, 'yyyy-MM-dd');
+                    const key = cellKey(emp.id, dateStr);
+                    const isEditing = editing === key;
+
+                    if (!avail) {
+                      return (
+                        <td key={day.toISOString()} className="p-2 text-center">
+                          <button
+                            onClick={() => toggleAvailability(emp.id, day)}
+                            className="w-10 h-10 mx-auto rounded-lg flex items-center justify-center transition-all bg-red-50 text-red-300 border border-red-100 hover:border-red-300"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </td>
+                      );
+                    }
+
                     return (
                       <td key={day.toISOString()} className="p-2 text-center">
-                        <button
-                          onClick={() => toggleAvailability(emp.id, day)}
-                          className={`w-10 h-10 mx-auto rounded-lg flex items-center justify-center transition-all ${
-                            active 
-                              ? 'bg-green-100 text-green-600 border-2 border-green-500' 
-                              : 'bg-red-50 text-red-300 border border-red-100 hover:border-red-300'
-                          }`}
-                        >
-                          {active ? <Check className="w-5 h-5" /> : <X className="w-4 h-4" />}
-                        </button>
+                        <div className="relative w-16 mx-auto">
+                          <div
+                            onClick={() => toggleAvailability(emp.id, day)}
+                            className="min-h-10 py-1 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all bg-green-100 text-green-600 border-2 border-green-500"
+                          >
+                            <Check className="w-5 h-5" />
+                            {avail.timeNote && (
+                              <span className="text-[10px] leading-tight font-medium mt-0.5">{avail.timeNote}</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditing(isEditing ? null : key);
+                            }}
+                            title="Указать время"
+                            className="absolute -top-1.5 -right-1.5 p-0.5 rounded-full bg-white border border-green-400 text-green-600 hover:bg-green-50"
+                          >
+                            <Clock className="w-3 h-3" />
+                          </button>
+                          {isEditing && (
+                            <input
+                              autoFocus
+                              defaultValue={avail.timeNote || ''}
+                              placeholder="с 09:00"
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={(e) => {
+                                updateTimeNote(emp.id, dateStr, e.target.value);
+                                setEditing(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                              }}
+                              className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-20 z-20 border border-gray-300 rounded px-1.5 py-1 text-xs text-gray-700"
+                            />
+                          )}
+                        </div>
                       </td>
                     );
                   })}
