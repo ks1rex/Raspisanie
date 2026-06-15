@@ -1,4 +1,5 @@
 """Генерация расписания через диалог: бот просит доступность, парсит ответ."""
+import logging
 from datetime import date
 
 from telegram import Update
@@ -10,6 +11,8 @@ from handlers.admin import is_admin
 from services.db import db
 from services.parser import parse_availability
 from services.scheduler import generate_schedule
+
+logger = logging.getLogger(__name__)
 
 RECEIVE = 0  # единственное состояние: ждём текст доступности после /schedule
 
@@ -61,14 +64,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    availabilities = parse_availability(update.message.text)
-    if not availabilities:
-        await update.message.reply_text("Не распознал доступность. Попробуй ещё раз или /cancel.")
-        return RECEIVE
-    data = await db.get_full_data()
-    schedule = generate_schedule(data, availabilities)
-    await update.message.reply_text(_format(schedule, data) or "Нет данных.")
-    return ConversationHandler.END
+    try:
+        availabilities = parse_availability(update.message.text)
+        logger.info(f"Parsed availability: {availabilities}")
+        if not availabilities:
+            await update.message.reply_text(
+                "⚠️ Не удалось распознать доступность.\n"
+                "Проверь формат:\nИван 16.06 17.06\nПетр с15:00 16.06"
+            )
+            return ConversationHandler.END
+
+        data = await db.get_full_data()
+        logger.info(f"DB data: workplaces={len(data.get('workplaces', []))}, "
+                    f"employees={len(data.get('employees', []))}")
+        if not data.get('workplaces') or not data.get('employees'):
+            await update.message.reply_text("⚠️ В базе нет данных. Добавь места и сотрудников.")
+            return ConversationHandler.END
+
+        schedule = generate_schedule(data, availabilities)
+        logger.info(f"Schedule result: {schedule}")
+        if not schedule:
+            await update.message.reply_text("⚠️ Расписание пустое — никто не доступен в указанные дни.")
+            return ConversationHandler.END
+
+        await update.message.reply_text(_format(schedule, data))
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Schedule error: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+        return ConversationHandler.END
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
