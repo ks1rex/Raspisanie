@@ -14,6 +14,21 @@ from handlers.notify import notify_schedule
 
 
 class _Health(BaseHTTPRequestHandler):
+    def send_cors_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+    def do_OPTIONS(self):
+        if self.path == '/notify':
+            self.send_response(200)
+            self.send_cors_headers()
+            self.end_headers()
+            return
+
+        self.send_response(404)
+        self.end_headers()
+
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
@@ -27,6 +42,7 @@ class _Health(BaseHTTPRequestHandler):
 
         if not NOTIFY_SECRET or self.headers.get("Authorization") != f"Bearer {NOTIFY_SECRET}":
             self.send_response(401)
+            self.send_cors_headers()
             self.end_headers()
             return
 
@@ -36,6 +52,7 @@ class _Health(BaseHTTPRequestHandler):
             text = payload["text"]
         except (json.JSONDecodeError, KeyError):
             self.send_response(400)
+            self.send_cors_headers()
             self.end_headers()
             return
 
@@ -44,10 +61,12 @@ class _Health(BaseHTTPRequestHandler):
         except Exception:
             log.error("notify_schedule упал", exc_info=True)
             self.send_response(500)
+            self.send_cors_headers()
             self.end_headers()
             return
 
         self.send_response(200)
+        self.send_cors_headers()
         self.end_headers()
         self.wfile.write(b"OK")
 

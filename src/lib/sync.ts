@@ -34,7 +34,10 @@ export async function pushToCloud(
       .from('workplaces')
       .upsert(workplaces.map(w => ({ name: w.name })), { onConflict: 'name' })
       .select()
-    if (wpErr) throw wpErr
+    if (wpErr) {
+      console.error('[pushToCloud] шаг 1 (workplaces) упал:', wpErr)
+      throw wpErr
+    }
     const wpIdByName = new Map(wpRows!.map(r => [r.name, r.id]))
 
     // 2. roles по (workplace_id, name)
@@ -45,7 +48,10 @@ export async function pushToCloud(
       .from('roles')
       .upsert(roleRows, { onConflict: 'workplace_id,name' })
       .select()
-    if (roleErr) throw roleErr
+    if (roleErr) {
+      console.error('[pushToCloud] шаг 2 (roles) упал:', roleErr)
+      throw roleErr
+    }
     const roleIdByKey = new Map(roleData!.map(r => [`${r.workplace_id}|${r.name}`, r.id]))
 
     // локальный roleId -> (имя места, имя роли) для резолва скиллов
@@ -57,7 +63,10 @@ export async function pushToCloud(
       .from('employees')
       .upsert(employees.map(e => ({ name: e.name, priority: e.priority })), { onConflict: 'name' })
       .select()
-    if (empErr) throw empErr
+    if (empErr) {
+      console.error('[pushToCloud] шаг 3 (employees) упал:', empErr)
+      throw empErr
+    }
     const empIdByName = new Map(empRows!.map(r => [r.name, r.id]))
 
     // 4. skills по (employee_id, role_id); role_id ищем по месту+роли
@@ -74,12 +83,23 @@ export async function pushToCloud(
       const { error: skErr } = await supabase
         .from('skills')
         .upsert(skillRows, { onConflict: 'employee_id,role_id' })
-      if (skErr) throw skErr
+      if (skErr) {
+        console.error('[pushToCloud] шаг 4 (skills) упал:', skErr)
+        throw skErr
+      }
     }
 
     return { success: true }
   } catch (e) {
-    return { success: false, error: (e as Error).message }
+    const err = e as { message?: string; details?: string; hint?: string; code?: string }
+    console.error('[pushToCloud] полная ошибка от Supabase:', {
+      message: err.message,
+      details: err.details,
+      hint: err.hint,
+      code: err.code,
+      raw: e,
+    })
+    return { success: false, error: err.message || String(e) }
   }
 }
 
