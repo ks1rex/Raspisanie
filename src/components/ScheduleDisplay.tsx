@@ -3,6 +3,7 @@ import { DailySchedule, Workplace, Employee } from '../types';
 import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { Briefcase, User, FileText, Copy } from 'lucide-react';
+import { buildScheduleText } from '../utils/scheduleText';
 
 interface Props {
   schedule: DailySchedule[];
@@ -11,23 +12,7 @@ interface Props {
 }
 
 export const ScheduleDisplay: React.FC<Props> = ({ schedule, workplaces, employees }) => {
-  const buildText = () =>
-    workplaces.map((wp) => {
-      const lines = schedule.map((day) => {
-        const dayName = format(parseISO(day.date), 'EEEEEE', { locale: ru });
-        const cap = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-        const names = day.assignments
-          .filter(a => a.workplaceId === wp.id)
-          .map(a => {
-            const name = employees.find(e => e.id === a.employeeId)?.name;
-            return name ? (a.timeNote ? `${name} (${a.timeNote})` : name) : null;
-          })
-          .filter(Boolean)
-          .join(', ');
-        return names ? `${cap}: ${names}\n` : '';
-      }).join('');
-      return `${wp.name}\n${lines}`;
-    }).join('\n');
+  const buildText = () => buildScheduleText(schedule, workplaces, employees);
 
   const exportToText = () => {
     const blob = new Blob([buildText()], { type: 'text/plain;charset=utf-8' });

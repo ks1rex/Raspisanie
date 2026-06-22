@@ -14,3 +14,5 @@ services:
         sync: false
       - key: ADMIN_IDS
         sync: false
+      - key: NOTIFY_SECRET
+        sync: false

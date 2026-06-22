@@ -2,6 +2,26 @@ import { supabase } from './supabase'
 import { Workplace, Employee } from '../types'
 
 const NOT_CONFIGURED = 'Supabase не настроен'
+const BOT_NOT_CONFIGURED = 'VITE_BOT_URL не настроен'
+
+export async function sendScheduleToBot(scheduleText: string): Promise<{ success: boolean; error?: string }> {
+  const botUrl = import.meta.env.VITE_BOT_URL
+  if (!botUrl) return { success: false, error: BOT_NOT_CONFIGURED }
+  try {
+    const res = await fetch(`${botUrl.replace(/\/$/, '')}/notify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_NOTIFY_SECRET}`,
+      },
+      body: JSON.stringify({ text: scheduleText }),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+}
 
 export async function pushToCloud(
   workplaces: Workplace[],

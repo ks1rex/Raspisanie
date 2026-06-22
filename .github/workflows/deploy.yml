@@ -28,6 +28,9 @@ jobs:
           # anon-ключ публичный — впекается в бандл; задать в Settings → Secrets/Variables
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_BOT_URL: ${{ secrets.VITE_BOT_URL }}
+          # тоже публичный — впекается в бандл; должен совпадать с NOTIFY_SECRET бота
+          VITE_NOTIFY_SECRET: ${{ secrets.VITE_NOTIFY_SECRET }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

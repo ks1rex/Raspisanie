@@ -6,7 +6,8 @@ import { AvailabilityManager } from './components/AvailabilityManager';
 import { ScheduleDisplay } from './components/ScheduleDisplay';
 import { LayoutDashboard, Users, CalendarDays, Settings2, Sparkles, Menu, X, CloudUpload, CloudDownload, Loader2, Check } from 'lucide-react';
 import { generateSchedule } from './utils/scheduler';
-import { pushToCloud, pullFromCloud } from './lib/sync';
+import { buildScheduleText } from './utils/scheduleText';
+import { pushToCloud, pullFromCloud, sendScheduleToBot } from './lib/sync';
 import { supabase } from './lib/supabase';
 import { format, addDays } from 'date-fns';
 
@@ -103,6 +104,9 @@ const App: React.FC = () => {
     const newSchedule = generateSchedule(workplaces, employees, availabilities, today, nextWeek);
     setSchedule(newSchedule);
     setActiveTab('schedule');
+    sendScheduleToBot(buildScheduleText(newSchedule, workplaces, employees)).then((r) => {
+      if (!r.success) console.error('Не удалось отправить расписание боту:', r.error);
+    });
   };
 
   const exportData = (type: 'workplaces' | 'employees') => {
