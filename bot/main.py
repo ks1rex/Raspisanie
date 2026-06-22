@@ -1,82 +1,16 @@
 import asyncio
-import json
 import logging
 import os
 import sys
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from telegram.ext import Application
 
 from config import BOT_TOKEN, NOTIFY_SECRET
 from handlers import admin, schedule, info
 from handlers.notify import notify_schedule
-
-
-class _Health(BaseHTTPRequestHandler):
-    def send_cors_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-
-    def do_OPTIONS(self):
-        if self.path == '/notify':
-            self.send_response(200)
-            self.send_cors_headers()
-            self.end_headers()
-            return
-
-        self.send_response(404)
-        self.end_headers()
-
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
-
-    def do_POST(self):
-        if self.path != "/notify":
-            self.send_response(404)
-            self.end_headers()
-            return
-
-        if not NOTIFY_SECRET or self.headers.get("Authorization") != f"Bearer {NOTIFY_SECRET}":
-            self.send_response(401)
-            self.send_cors_headers()
-            self.end_headers()
-            return
-
-        length = int(self.headers.get("Content-Length", 0))
-        try:
-            payload = json.loads(self.rfile.read(length) or b"{}")
-            text = payload["text"]
-        except (json.JSONDecodeError, KeyError):
-            self.send_response(400)
-            self.send_cors_headers()
-            self.end_headers()
-            return
-
-        try:
-            asyncio.run(notify_schedule(text))
-        except Exception:
-            log.error("notify_schedule упал", exc_info=True)
-            self.send_response(500)
-            self.send_cors_headers()
-            self.end_headers()
-            return
-
-        self.send_response(200)
-        self.send_cors_headers()
-        self.end_headers()
-        self.wfile.write(b"OK")
-
-    def log_message(self, *args):  # не спамим stdout каждым health-пингом
-        pass
-
-
-def _serve_health():
-    port = int(os.getenv("PORT", "8080"))
-    HTTPServer(("", port), _Health).serve_forever()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,6 +18,40 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 log = logging.getLogger("bot")
+logging.getLogger("werkzeug").setLevel(logging.WARNING)  # не спамим stdout каждым health-пингом
+
+flask_app = Flask(__name__)
+CORS(flask_app)  # разрешает все origins
+
+
+@flask_app.route('/health', methods=['GET'])
+def health():
+    return 'OK', 200
+
+
+@flask_app.route('/notify', methods=['POST'])
+def notify():
+    auth = request.headers.get('Authorization', '')
+    if not NOTIFY_SECRET or auth != f'Bearer {NOTIFY_SECRET}':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.get_json(silent=True)
+    if not data or 'text' not in data:
+        return jsonify({'error': 'No text'}), 400
+
+    text = data['text']
+    try:
+        asyncio.run(notify_schedule(text))
+    except Exception:
+        log.error("notify_schedule упал", exc_info=True)
+        return jsonify({'error': 'Internal error'}), 500
+
+    return jsonify({'ok': True}), 200
+
+
+def run_flask():
+    port = int(os.environ.get('PORT', 8080))
+    flask_app.run(host='0.0.0.0', port=port)
 
 
 def main():
@@ -91,7 +59,7 @@ def main():
     admin.register(app)
     schedule.register(app)
     info.register(app)
-    threading.Thread(target=_serve_health, daemon=True).start()
+    threading.Thread(target=run_flask, daemon=True).start()
     log.info("Bot started, polling…")
     app.run_polling()
 

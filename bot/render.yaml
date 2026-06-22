@@ -3,6 +3,7 @@ services:
     name: raspisanie-bot
     runtime: docker
     dockerfilePath: ./bot/Dockerfile
+    healthCheckPath: /health
     envVars:
       - key: BOT_TOKEN
         sync: false
